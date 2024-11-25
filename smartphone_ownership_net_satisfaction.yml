@@ -1,0 +1,172 @@
+version: 1
+name: smartphone_ownership_net_satisfaction
+sql_table_name: PILOT_DATA.SMARTPHONE_OWNERSHIP_NET_SATISFACTION
+description: |
+  Survey data for smartphones features and users' satisfaction or dissatisfaction with those features. Each record represents a survey response about smartphone features, including demographic data and purchase details.
+  - Most measures have specific requirements, these are mentioned in those measure's use_when.
+  General Instructions:
+  - Use separate data pulls for each comparison group. Comparison is indicated through, BUT NOT LIMITED TO, the use of words like 'vs', 'between', 'compared', etc.
+  - For example, when asked for net satisfaction for Samsung men aged 20-30 vs google vs average, perform three data pulls:
+  1. Filtered for Samsung, men and age in the range of 20-30.
+  2. Filtered for Google
+  3. An unfiltered average.
+always_clarify:
+  - "ALWAYS ensure that **quarterly_periods** and **country** are specified or clarified in the user's question. If no quarterly_periods is mentioned, assume '2024Q3', the latest quarter. Once these have been confirmed, there is NO NEED to ask for confirmation again for follow up questions."
+  - "ALWAYS INFORM (DO NOT ASK) USER ABOUT THESE THE ASSUMPTIONS **IF** YOU MAKE THEM IN **THESE EXACT WORDS**: 1 - 'Quarterly Period: I'll assume '2024Q3', the latest quarter, unless you specify otherwise.'"
+
+fields:
+  - name: feature
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.FEATURE
+    description: "Features that respondents are either happy or unhappy with."
+
+  - name: satisfaction_weight
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.SATISFACTION_WEIGHT
+    description: "Weight assigned to satisfied responses for a feature."
+
+  - name: dissatisfaction_weight
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.DISSATISFACTION_WEIGHT
+    description: "Weight assigned to dissatisfied responses for a feature."
+
+  - name: quarterly_periods
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.QUARTERLY_PERIODS
+    description: "Quarterly period information."
+
+  - name: country
+    field_type: dimension
+    type: string
+    sql: CASE ${TABLE}.COUNTRY
+             WHEN 'ES' THEN 'Spain'
+             ELSE ${TABLE}.COUNTRY
+           END    
+    description: "Country of the respondent."
+
+  - name: weight_per_person
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.WEIGHT_PER_PERSON
+    description: "Weight per person for the data."
+
+  - name: phone_model
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.PHONE_MODEL
+    description: "Phone model."
+
+  # - name: network
+  #   field_type: dimension
+  #   type: string
+  #   sql: ${TABLE}.NETWORK
+  #   description: "Network provider."
+
+  # - name: retailer
+  #   field_type: dimension
+  #   type: string
+  #   sql: ${TABLE}.RETAILER_FULL_LIST
+  #   description: "Retailer where the phone was purchased."
+
+  - name: phone_brand
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.PHONE_BRAND_FULL_LIST
+    description: "Brand of the phone."
+    value_meanings:
+      - value: "Apple"
+        meaning: "Represents Apple's iPhone models"
+      - value: "Google"
+        meaning: "Represents Google's Pixel phone models"
+      - value: "Samsung"
+        meaning: "Represents Samsung's Galaxy phone models"
+
+  # - name: previous_phone_brand
+  #   field_type: dimension
+  #   type: string
+  #   sql: ${TABLE}.PHONE_PREVIOUS_BRAND_FULL_LIST
+  #   description: "Respondent's previous phone brand."
+
+  - name: age
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.AGE
+    description: "Age of the respondent."
+
+  - name: age_breaks
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.AGE_BREAKS
+    description: "Age groups/breaks for the respondent."
+
+  - name: gender
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.GENDER
+    description: "Gender of the respondent."
+
+  # - name: contract_or_prepay
+  #   field_type: dimension
+  #   type: string
+  #   sql: ${TABLE}.CONTRACT_PREPAY
+  #   description: "Indicates if the phone was prepaid or on contract."
+
+  # - name: retailer_channel
+  #   field_type: dimension
+  #   type: string
+  #   sql: ${TABLE}.CHANNEL
+  #   description: "Sales channel, such as Online or In Store."
+
+# Measures
+
+  - name: net_satisfaction_drivers
+    field_type: measure
+    type: number
+    sql: ${satisfaction_drivers} - ${dissatisfaction_drivers}
+    description: Displays the net satisfaction that customers that report for a feature.
+    value_format_name: decimal_2
+    use_when: |
+      - ALWAYS GROUP BY 'feature' AND 'quarterly_periods'. THIS IS VERY IMPORTANT. DO NOT FORGET THIS.
+      - ORDER BY THE 'quarterly_periods' ASC and MEASURE DESC
+      - Use this also when asked questions like 'How many people are net satisfied', etc.
+
+  - name: satisfaction_drivers
+    field_type: measure
+    type: number
+    sql: SUM( ${satisfaction_weight} ) / SUM(SUM(CASE WHEN ${satisfaction_weight} > 0 THEN ${weight_per_person} END)) OVER (PARTITION BY ${quarterly_periods})
+    description: Displays the features customers are happy with and their percentage contribution.
+    value_format_name: decimal_2
+    use_when: |
+      - ALWAYS GROUP BY 'feature' AND 'quarterly_periods'. THIS IS VERY IMPORTANT. DO NOT FORGET THIS.
+      - ORDER BY THE 'quarterly_periods' ASC and MEASURE DESC
+      - Use this also when asked questions like 'How many people are satisfied', etc.
+
+  - name: dissatisfaction_drivers
+    field_type: measure
+    type: number
+    sql: SUM(${dissatisfaction_weight} ) / SUM(SUM(CASE WHEN ${dissatisfaction_weight} > 0 THEN ${weight_per_person} END)) OVER (PARTITION BY ${quarterly_periods})
+    description: Displays the features customers are unhappy with and their percentage contribution.
+    value_format_name: decimal_2
+    use_when: |
+      - ALWAYS GROUP BY 'feature' AND 'quarterly_periods'. THIS IS VERY IMPORTANT. DO NOT FORGET THIS.
+      - ORDER BY THE 'quarterly_periods' ASC and MEASURE DESC
+      - Use this also when asked questions like 'How many people are dissatisfied', etc.
+
+  # - name: satisfaction_drivers
+  #   field_type: measure
+  #   type: number
+  #   sql: ROUND((SUM( ${satisfaction_weight} ) / SUM(SUM(CASE WHEN ${satisfaction_weight} > 0 THEN ${weight_per_person} END)) OVER (PARTITION BY ${quarterly_periods})) * 100, 2)
+  #   description: Displays the features customers are happy with and their percentage contribution over multiple periods
+  #   use_when: |
+  #     - ALWAYS FILTER by 'quarterly_periods' and 'country' WHEN RUNNING THIS MEASURE
+  #     - ALWAYS GROUP BY 'feature' AND 'quarterly_periods'
+  #     - ALWAYS ORDER BY THE 'quarterly_periods' ASC and MEASURE DESC
+  #     - Never filter for a specific feature even if the user asks for it.
+
+
+
+      

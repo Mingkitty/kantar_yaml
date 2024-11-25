@@ -1,0 +1,191 @@
+version: 1
+name: smartphone_sales_trended_table
+sql_table_name: PILOT_DATA.SMARTPHONE_SALES_TRENDED_TABLE
+description: |
+  Survey data for smartphones from a sales perspective. Each record represents a survey response about smartphone sales, including demographic data and purchase details.
+  General Instructions:
+  - Use separate data pulls for each comparison group. Comparison is indicated through, BUT NOT LIMITED TO, the use of words like 'vs', 'between', 'compared', etc.
+  - For example, when asked for top retailers for Samsung men aged 20-30 vs google vs average, perform three data pulls:
+  1. Filtered for Samsung, men and age in the range of 20-30.
+  2. Filtered for Google
+  3. An unfiltered average.
+always_clarify:
+  - ALWAYS STATE YOUR ASSUMPTION ABOUT PERSPECTIVE, in this case sales.
+  - "ALWAYS ensure that **duration_grouping**, **quarterly_periods** and **country** are specified or clarified in the user's question. If no duration_grouping is mentioned, assume '12 month ending' and for quarterly_periods, assume '2024Q3', the latest quarter. Once these have been confirmed, there is NO NEED to ask for confirmation again for follow up questions."
+  - "ALWAYS INFORM (DO NOT ASK) USER ABOUT THESE THREE ASSUMPTIONS **IF** YOU MAKE THEM IN **THESE EXACT WORDS**: 1 - 'Perspective: I'll assume this question is from a sales perspective unless you specify otherwise.' 2 - 'Duration Grouping: I'll assume '12 month ending' unless you specify otherwise.' 3 - 'Quarterly Period: I'll assume '2024Q3', the latest quarter, unless you specify otherwise.'"
+
+fields: 
+  - name: duration_grouping 
+    field_type: dimension
+    type: string
+    sql: CASE ${TABLE}.DURATION_GROUPING
+             WHEN '12 m/e' THEN '12 month ending'
+             WHEN '6 m/e' THEN '6 month ending'
+             WHEN '3 m/e' THEN '3 month ending'
+             ELSE 'Unknown duration'
+           END
+    description: "Duration grouping for the data, such as '12 month ending', '6 month ending', or '3 month ending'."
+    use_when: Always assume '12 month ending' if not specified BUT INFORM USER.
+  
+  - name: quarterly_periods
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.QUARTERLY_PERIODS
+    description: "Time period when the duration group ends, such as '2023Q3'."
+    use_when: Always assume '2024Q3', the latest quarter, if not specified BUT INFORM USER.
+
+  - name: country
+    field_type: dimension
+    type: string
+    sql: CASE ${TABLE}.COUNTRY
+             WHEN 'ES' THEN 'Spain'
+             ELSE ${TABLE}.COUNTRY
+           END    
+    description: "Country of the respondent"
+  
+  - name: handset_spend_euros
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.HANDSET_SPEND_EUROS
+    description: "How much consumers spend on handsets, in euros."
+
+  - name: handset_spend_usd
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.HANDSET_SPEND_USD
+    description: "How much consumers spend on handsets, in USD"
+  
+  - name: phone_model
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.PHONE_MODEL
+    description: "Phone model"
+
+  - name: network
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.NETWORK
+    description: "Data on network or carrier preferences, such as Vodafone, Verizon, etc."
+
+  - name: retailer_channel
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.CHANNEL
+    description: "Sales channel, such as Online, In Store, etc."
+
+  - name: contract_or_prepay
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.CONTRACT_PREPAY
+    description: "Indicates if the phone was prepaid or on contract"
+
+  - name: age
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.AGE
+    description: "Age of the respondent"
+
+  - name: age_generation_group
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.AGE_GENERATION_GROUP
+    description: "Generational group for the respondent (e.g., Gen Z, Millennials)"
+
+  - name: gender
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.GENDER
+    description: "Gender of the respondent"
+
+  - name: age_breaks
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.AGE_BREAKS
+    description: "Age groups/breaks for the respondent"
+
+  - name: retailer
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.RETAILER_FULL_LIST
+    description: "Retailer where the phone was purchased"
+    use_when: Always group by this when calculating retailer share. Make sure you DON'T filter when grouping by this dimension to avoid 100% share errors.
+    dont_confuse_with: "Do not confuse with 'retailer_channel'; 'retailer' refers to the specific store or chain."
+
+  - name: phone_brand
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.PHONE_BRAND_FULL_LIST
+    description: "Respondent's phone brand"
+    value_meanings:
+      - value: "Apple"
+        meaning: "Represents Apple's iPhone models"
+      - value: "Google"
+        meaning: "Represents Google's Pixel phone models"
+      - value: "Samsung"
+        meaning: "Represents Samsung's Galaxy phone models"
+
+  - name: previous_phone_brand
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.PHONE_PREVIOUS_BRAND_FULL_LIST
+    description: "Respondent's previous phone brand"
+
+  - name: weight
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.WEIGHT
+    description: "Weighting factor for the data"
+
+# Measures
+
+  - name: sales_retailer_share
+    field_type: measure
+    type: ratio
+    aggregation: sum
+    sql: ${weight}
+    denominator_aggregated_over: retailer
+    value_format_name: percent_2
+    description: The market share amongst retailers from a sales perspective.
+    use_when: |
+      - ALWAYS GROUP BY 'retailer' and 'quarterly_periods'. THIS IS VERY IMPORTANT. DO NOT FORGET THIS.
+      - ORDER BY 'quarterly_periods' ASC and MEASURE DESC
+    filters:
+      - field: retailer
+        value: -NULL
+
+  - name: sales_brand_share
+    field_type: measure
+    type: ratio
+    aggregation: sum
+    sql: ${weight}
+    denominator_aggregated_over: phone_brand
+    value_format_name: percent_2
+    description: The market share amongst brands from a sales perspective.
+    use_when: |
+      - ALWAYS GROUP BY 'phone_brand' and 'quarterly_periods'. THIS IS VERY IMPORTANT. DO NOT FORGET THIS.
+      - ORDER BY 'quarterly_periods' ASC and MEASURE DESC
+    filters:
+      - field: phone_brand
+        value: -NULL
+
+  # - name: sales_age_group_share
+  #   field_type: measure
+  #   type: ratio
+  #   aggregation: sum
+  #   sql: ${weight}
+  #   denominator_aggregated_over: age_generation_group
+  #   formatting: percentage
+  #   description: The market share amongst age groups from a sales perspective.
+  #   use_when: |
+  #     - ALWAYS GROUP BY 'age_generation_group' and 'quarterly_periods', ORDER BY 'quarterly_periods' ASC and MEASURE DESC and filter out nulls in 'age_generation_group'
+
+  # - name: sales_gender_share
+  #   field_type: measure
+  #   type: ratio
+  #   aggregation: sum
+  #   sql: ${weight}
+  #   denominator_aggregated_over: gender
+  #   formatting: percentage
+  #   description: The market share amongst gender from a sales perspective.
+  #   use_when: |
+  #     - ALWAYS GROUP BY 'gender' and 'quarterly_periods', ORDER BY 'quarterly_periods' ASC and MEASURE DESC and filter out nulls in 'gender'

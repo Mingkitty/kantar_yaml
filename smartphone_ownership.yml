@@ -1,0 +1,230 @@
+version: 1
+name: smartphone_ownership
+sql_table_name: PILOT_DATA.SMARTPHONE_OWNERSHIP
+description: |
+  Survey data for smartphones from an ownership perspective. Each record represents a survey response from smartphone owners, including demographic data and purchase details.
+  - Most measures have specific requirements, these are mentioned in those measure's use_when.
+  General Instructions:
+  - Use separate data pulls for each comparison group. Comparison is indicated through, BUT NOT LIMITED TO, the use of words like 'vs', 'between', 'compared', etc.
+  - For example, when asked for top retailers for Samsung men aged 20-30 vs google vs average, perform three data pulls:
+  1. Filtered for Samsung, men and age in the range of 20-30.
+  2. Filtered for Google
+  3. An unfiltered average.
+always_clarify:
+  - ALWAYS STATE YOUR ASSUMPTION ABOUT PERSPECTIVE, in this case ownership.
+  - "ALWAYS ensure that **quarterly_periods** and **country** are specified or clarified in the user's question. If no quarterly_periods is mentioned, assume '2024Q3', the latest quarter. Once these have been confirmed, there is NO NEED to ask for confirmation again for follow up questions."
+  - "ALWAYS INFORM (DO NOT ASK) USER ABOUT THESE THE ASSUMPTIONS **IF** YOU MAKE THEM IN **THESE EXACT WORDS**: 1 - 'Perspective: I'll assume this question is from an ownership perspective unless you specify otherwise.', 2 - 'Quarterly Period: I'll assume '2024Q3', the latest quarter, unless you specify otherwise.'"
+
+
+fields: 
+
+  - name: quarterly_periods
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.QUARTERLY_PERIODS
+    description: "Quarterly period information"
+  
+  - name: country
+    field_type: dimension
+    type: string
+    sql: CASE ${TABLE}.COUNTRY
+             WHEN 'ES' THEN 'Spain'
+             ELSE ${TABLE}.COUNTRY
+           END    
+    description: "Country of the respondent"
+  
+  - name: weight
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.WEIGHT
+    description: "Weighting factor for the data"
+  
+  - name: handset_spend_euros
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.HANDSET_SPEND_EUROS
+    description: "Handset spend in Euros"
+
+  - name: handset_spend_usd
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.HANDSET_SPEND_USD
+    description: "Handset spend in USD"
+  
+  - name: phone_model
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.PHONE_MODEL
+    description: "Phone model"
+
+  - name: network
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.NETWORK
+    description: "Network provider"
+
+  - name: retailer_channel
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.CHANNEL
+    description: "Sales channel"
+
+  - name: contract_or_prepay
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.CONTRACT_PREPAY
+    description: "Indicates if the phone was prepaid or on contract"
+
+  - name: age
+    field_type: dimension
+    type: number
+    sql: ${TABLE}.AGE
+    description: "Age of the respondent"
+
+  - name: gender
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.GENDER
+    description: "Gender of the respondent"
+
+  - name: age_breaks
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.AGE_BREAKS
+    description: "Age groups/breaks for the respondent"
+
+  - name: age_generation_group
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.AGE_GENERATION_GROUP
+    description: "Generational group for the respondent (e.g., Gen Z, Millennials)"
+
+  - name: retailer
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.RETAILER_FULL_LIST
+    description: "Retailer where the phone was purchased"
+    use_when: Never just provide a list of retailers, always use this with the ownership_share_percentage, grouping by retailer when asked about retailers.
+    dont_confuse_with: "Do not confuse with 'retailer_channel'; 'retailer' refers to the specific store or chain."
+
+  - name: phone_brand
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.PHONE_BRAND_FULL_LIST
+    description: "Respondent's phone brand"
+    value_meanings:
+      - value: "Apple"
+        meaning: "Represents Apple's iPhone models"
+      - value: "Google"
+        meaning: "Represents Google's Pixel phone models"
+      - value: "Samsung"
+        meaning: "Represents Samsung's Galaxy phone models"
+
+  - name: phone_previous_brand
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.PHONE_PREVIOUS_BRAND_FULL_LIST
+    description: "Respondent's previous phone brand"
+
+  - name: nps_category
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.MOBILE_NPS
+    description: 'Net Promoter Score category for the respondent'
+
+  - name: loyal_or_churner
+    field_type: dimension
+    type: string
+    sql: ${TABLE}.LOYAL_OR_CHURNER
+    description: "Indicates if the respondant is a churner or a loyalist"
+
+# Measures
+
+  - name: ownership_retailer_share
+    field_type: measure
+    type: ratio
+    aggregation: sum
+    sql: ${weight}
+    denominator_aggregated_over: retailer
+    value_format_name: decimal_pct_2
+    description: The market share amongst retailers from an ownership perspective.
+    use_when: |
+      - ALWAYS GROUP BY 'retailer' and 'quarterly_periods'. THIS IS VERY IMPORTANT. DO NOT FORGET THIS.
+      - ORDER BY 'quarterly_periods' ASC and MEASURE DESC
+    filters:
+      - field: retailer
+        value: -NULL
+
+  - name: nps_score
+    field_type: measure
+    type: number
+    sql: (SUM(CASE WHEN ${nps_category} = 'Promoter' THEN 1 * ${weight} WHEN ${nps_category} = 'Passive' THEN 0 WHEN ${nps_category} = 'Detractor' THEN -1 * ${weight} ELSE 0 END) / SUM(${weight})) * 100
+    description: NPS Score for phones. This is between -100 and 100. We default to this measure when asked about NPS but also provide NPS proportion if requested by user.
+    value_format_name: decimal_2
+    synonyms:
+      - NPS
+    use_when: |
+      - ALWAYS filter out nulls in 'nps_category'
+  # - ALWAYS GROUP BY 'quarterly_periods'. THIS IS VERY IMPORTANT. DO NOT FORGET THIS. YOU CANNOT GROUP BY ANYTHING ELSE.
+    dont_confuse_with: nps_proportion. One is the score, another is proportion breakdown. Default to score.
+
+  - name: nps_proportion
+    field_type: measure
+    type: ratio
+    aggregation: sum
+    sql: ${weight}
+    denominator_aggregated_over: nps_category
+    value_format_name: decimal_pct_2
+    description: The proportion of respondents in an NPS category - for example, the percentage of respondents who are promoters. Default to nps_score when asked about NPS but also offer to provide this proportion.
+    use_when: |
+      - ALWAYS GROUP BY 'nps_category' and 'quarterly_periods'. THIS IS VERY IMPORTANT. DO NOT FORGET THIS.
+      - ORDER BY 'quarterly_periods' ASC and MEASURE DESC
+    dont_confuse_with: nps_score. One is the score, another is proportion breakdown. Default to score.
+    filters:
+      - field: nps_category
+        value: -NULL
+
+  - name: ownership_average_spend_euros
+    field_type: measure
+    type: average
+    sql: ${handset_spend_euros}
+    value_format_name: eur_2
+    description: The average spend in euros from an ownership perspective.
+
+# Commented-out metrics:
+#   - name: ownership_brand_share
+#     field_type: measure
+#     type: ratio
+#     aggregation: sum
+#     sql: ${weight}
+#     denominator_aggregated_over: phone_brand
+#     formatting: percentage
+#     description: The market share amongst brands from an ownership perspective.
+#     use_when: |
+#       - ALWAYS GROUP BY 'phone_brand' and 'quarterly_periods'. THIS IS VERY IMPORTANT. DO NOT FORGET THIS.
+#       - ORDER BY 'quarterly_periods' ASC and MEASURE DESC
+#     filters:
+#       - field: phone_brand
+#         value: -NULL
+
+  # - name: ownership_age_group_share
+  #   field_type: measure
+  #   type: ratio
+  #   aggregation: sum
+  #   sql: ${weight}
+  #   denominator_aggregated_over: age_generation_group
+  #   formatting: percentage
+  #   description: The market share amongst age groups from an ownership perspective.
+  #   use_when: |
+  #     - ALWAYS GROUP BY 'age_generation_group' and 'quarterly_periods', ORDER BY 'quarterly_periods' ASC and MEASURE DESC and filter out nulls in 'age_generation_group'
+
+  # - name: ownership_gender_share
+  #   field_type: measure
+  #   type: ratio
+  #   aggregation: sum
+  #   sql: ${weight}
+  #   denominator_aggregated_over: gender
+  #   formatting: percentage
+  #   description: The market share amongst gender from an ownership perspective.
+  #   use_when: |
+  #     - ALWAYS GROUP BY 'gender' and 'quarterly_periods', ORDER BY 'quarterly_periods' ASC and MEASURE DESC and filter out nulls in 'gender'
